@@ -4,6 +4,7 @@ const request = require('supertest');
 const app = require('../lib/app');
 const connect = require('../lib/utils/connect');
 const mongoose = require('mongoose');
+const User = require('../lib/model/User');
 
 describe('app routes', () => {
   beforeAll(() => {
@@ -14,7 +15,75 @@ describe('app routes', () => {
     return mongoose.connection.dropDatabase();
   });
 
+  beforeEach(() => {
+    return User.init();
+  });
+
   afterAll(() => {
     return mongoose.connection.close();
+  });
+
+  it('can sign up a new user', () => {
+    return request(app)
+      .post('/api/v1/auth/signup')
+      .send({ username: 'test', password: 'abc' })
+      .then(res => {
+        expect(res.body).toEqual({
+          _id: expect.any(String),
+          username: 'test'
+        });
+      });
+  });
+
+  it('wont allow duplicate users', () => {
+    return request(app)
+      .post('/api/v1/auth/signup')
+      .send({ username: 'test', password: 'abc' })
+      .then(() => {
+        return request(app)
+          .post('/api/v1/auth/signup')
+          .send({ username: 'test', password: '1234' });
+      })
+      .then(res => { 
+        expect(res.body.status).toEqual(500);
+      });
+  });
+
+  it('can singin a user', async() => {
+    await User.create({ username: 'test', password: 'abc' });
+    const res = await request(app)
+      .post('/api/v1/auth/signin')
+      .send({ username: 'test', password: 'abc' });
+
+    expect(res.body).toEqual({
+      _id: expect.any(String),
+      username: 'test'
+    });
+  });
+
+  it('errors signin a user when a bad password is provided', async() => {
+    await User.create({ username: 'test', password: 'abc' });
+    const res = await request(app)
+      .post('/api/v1/auth/signin')
+      .send({ username: 'test', password: '123' });
+
+    expect(res.status).toEqual(401);
+    expect(res.body).toEqual({
+      status: 401,
+      message: 'Invalid username or password'
+    });
+  });
+
+  it('errors signin a user when a bad username is provided', async() => {
+    await User.create({ username: 'test', password: 'abc' });
+    const res = await request(app)
+      .post('/api/v1/auth/signin')
+      .send({ username: 'dog', password: 'abc' });
+
+    expect(res.status).toEqual(401);
+    expect(res.body).toEqual({
+      status: 401,
+      message: 'Invalid username or password'
+    });
   });
 });
